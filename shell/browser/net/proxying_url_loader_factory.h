@@ -23,6 +23,7 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/completion_once_callback.h"
+#include "net/ssl/ssl_info.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/network_context.mojom.h"
@@ -30,9 +31,10 @@
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
 #include "services/network/url_loader_factory.h"
+#include "shell/browser/api/electron_api_web_request.h"
 #include "shell/browser/net/electron_url_loader_factory.h"
-#include "shell/browser/net/web_request_api_interface.h"
 #include "url/gurl.h"
+#include "v8/include/cppgc/persistent.h"
 
 namespace mojo {
 template <typename T>
@@ -115,6 +117,7 @@ class ProxyingURLLoaderFactory
                              OnBeforeSendHeadersCallback callback) override;
     void OnHeadersReceived(const std::string& headers,
                            const net::IPEndPoint& endpoint,
+                           const std::optional<net::SSLInfo>& ssl_info,
                            OnHeadersReceivedCallback callback) override;
 
    private:
@@ -197,7 +200,7 @@ class ProxyingURLLoaderFactory
   };
 
   ProxyingURLLoaderFactory(
-      WebRequestAPI* web_request_api,
+      api::WebRequest* web_request,
       const HandlersMap& intercepted_handlers,
       int render_process_id,
       int frame_routing_id,
@@ -239,8 +242,6 @@ class ProxyingURLLoaderFactory
       mojo::PendingReceiver<network::mojom::TrustedHeaderClient> receiver)
       override;
 
-  WebRequestAPI* web_request_api() { return web_request_api_; }
-
   bool IsForServiceWorkerScript() const;
 
  private:
@@ -251,8 +252,7 @@ class ProxyingURLLoaderFactory
 
   bool ShouldIgnoreConnectionsLimit(const network::ResourceRequest& request);
 
-  // Passed from api::WebRequest.
-  raw_ptr<WebRequestAPI> web_request_api_;
+  const cppgc::WeakPersistent<api::WebRequest> web_request_;
 
   // This is passed from api::Protocol.
   //
