@@ -551,7 +551,7 @@ base::IDMap<WebContents*>& GetAllWebContents() {
 
 void OnCapturePageDone(gin_helper::Promise<gfx::Image> promise,
                        base::ScopedClosureRunner capture_handle,
-                       const viz::CopyOutputBitmapWithMetadata& result) {
+                       const content::CopyFromSurfaceResult& result) {
   auto ui_task_runner = content::GetUIThreadTaskRunner({});
   if (!ui_task_runner->RunsTasksInCurrentSequence()) {
     ui_task_runner->PostTask(
@@ -560,8 +560,14 @@ void OnCapturePageDone(gin_helper::Promise<gfx::Image> promise,
     return;
   }
 
+  if (!result.has_value()) {
+    promise.RejectWithErrorMessage(result.error());
+    capture_handle.RunAndReset();
+    return;
+  }
+
   // Hack to enable transparency in captured image
-  promise.Resolve(gfx::Image::CreateFrom1xBitmap(result.bitmap));
+  promise.Resolve(gfx::Image::CreateFrom1xBitmap(result->bitmap));
   capture_handle.RunAndReset();
 }
 
@@ -754,7 +760,11 @@ WebContents::WebContents(v8::Isolate* isolate,
   script_executor_ = std::make_unique<extensions::ScriptExecutor>(web_contents);
 #endif
 
-  session_ = Session::CreateFrom(isolate, GetBrowserContext());
+  // TODO: This works for main frames, but does not work for child frames.
+  // See: https://github.com/electron/electron/issues/49256
+  web_contents->SetSupportsDraggableRegions(true);
+
+  session_ = Session::FromOrCreate(isolate, GetBrowserContext());
 
   SetUserAgent(GetBrowserContext()->GetUserAgent());
 
@@ -776,7 +786,7 @@ WebContents::WebContents(v8::Isolate* isolate,
 {
   DCHECK(type != Type::kRemote)
       << "Can't take ownership of a remote WebContents";
-  session_ = Session::CreateFrom(isolate, GetBrowserContext());
+  session_ = Session::FromOrCreate(isolate, GetBrowserContext());
   InitWithSessionAndOptions(isolate, std::move(web_contents),
                             session_->browser_context(),
                             gin::Dictionary::CreateEmpty(isolate));
@@ -1020,6 +1030,10 @@ void WebContents::InitWithWebContents(
     bool is_guest) {
   browser_context_ = browser_context;
   web_contents->SetDelegate(this);
+
+  // TODO: This works for main frames, but does not work for child frames.
+  // See: https://github.com/electron/electron/issues/49256
+  web_contents->SetSupportsDraggableRegions(true);
 
 #if BUILDFLAG(ENABLE_PRINTING)
   PrintViewManagerElectron::CreateForWebContents(web_contents.get());
@@ -1777,8 +1791,6 @@ void WebContents::RenderFrameCreated(
     auto details = gin_helper::Dictionary::CreateEmpty(isolate);
     details.SetGetter("frame", render_frame_host);
     Emit("frame-created", details);
-    content::WebContents::FromRenderFrameHost(render_frame_host)
-        ->SetSupportsDraggableRegions(true);
   }
 }
 
@@ -2261,7 +2273,8 @@ void WebContents::WebContentsDestroyed() {
   v8::Local<v8::Object> wrapper;
   if (!GetWrapper(isolate).ToLocal(&wrapper))
     return;
-  wrapper->SetAlignedPointerInInternalField(0, nullptr);
+  wrapper->SetAlignedPointerInInternalField(0, nullptr,
+                                            v8::kEmbedderDataTypeTagDefault);
 
   // Tell WebViewGuestDelegate that the WebContents has been destroyed.
   if (guest_delegate_)
@@ -2395,6 +2408,9 @@ void WebContents::LoadURL(const GURL& url,
          true);
     return;
   }
+
+  if (web_contents()->NeedToFireBeforeUnloadOrUnloadEvents())
+    pending_unload_url_ = url;
 
   // Discard non-committed entries to ensure we don't re-use a pending entry.
   web_contents()->GetController().DiscardNonCommittedEntries();
@@ -3871,7 +3887,8 @@ void WebContents::PDFReadyToPrint() {
 }
 
 void WebContents::OnInputEvent(const content::RenderWidgetHost& rfh,
-                               const blink::WebInputEvent& event) {
+                               const blink::WebInputEvent& event,
+                               input::InputEventSource source) {
   Emit("input-event", event);
 }
 
@@ -3900,8 +3917,15 @@ void WebContents::RunBeforeUnloadDialog(content::WebContents* web_contents,
                                         content::RenderFrameHost* rfh,
                                         bool is_reload,
                                         DialogClosedCallback callback) {
-  // TODO: asyncify?
   bool default_prevented = Emit("will-prevent-unload");
+
+  if (pending_unload_url_.has_value() && !default_prevented) {
+    Emit("did-fail-load", static_cast<int>(net::ERR_ABORTED),
+         net::ErrorToShortString(net::ERR_ABORTED),
+         pending_unload_url_.value().possibly_invalid_spec(), true);
+    pending_unload_url_.reset();
+  }
+
   std::move(callback).Run(default_prevented, std::u16string());
 }
 

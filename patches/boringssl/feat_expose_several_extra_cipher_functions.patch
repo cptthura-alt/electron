@@ -28,11 +28,11 @@ RC2 Ciphers: rc2-40-cbc
 It's unclear whether this would be accepted upstream. We should try regardless.
 
 diff --git a/crypto/cipher/get_cipher.cc b/crypto/cipher/get_cipher.cc
-index 6513df01c4b3e4d33fc6b521d9aae78ec5499e73..52eb7fea420e3d81d274fd5c1e21e4da0229687f 100644
+index dabc54aa13745600a62e57ecbb427e48a4565282..ce213e00573102ce9405a794d3c140d9ef499ec1 100644
 --- a/crypto/cipher/get_cipher.cc
 +++ b/crypto/cipher/get_cipher.cc
 @@ -31,6 +31,7 @@ static const struct {
-   const EVP_CIPHER *(*func)(void);
+   const EVP_CIPHER *(*func)();
  } kCiphers[] = {
      {NID_aes_128_cbc, "aes-128-cbc", EVP_aes_128_cbc},
 +    {NID_aes_128_cfb128, "aes-128-cfb", EVP_aes_128_cfb128},
@@ -118,10 +118,10 @@ index 891a73f229e3f0838cb2fa99b8fb24fdeac1962b..f7d0c5dc66f016eb9338c15e7f5ef59e
    callback(EVP_des_ede3_cbc(), "des-ede3-cbc", nullptr, arg);
    callback(EVP_rc2_cbc(), "rc2-cbc", nullptr, arg);
 diff --git a/include/openssl/cipher.h b/include/openssl/cipher.h
-index a5533caf45eaacc4baef4a73d97e9bc2b6e3a942..35f24c1b22ea2c6b4766c0d87e75b6fc6b459f79 100644
+index ed2eeab57779d827eb19edcd435b4664d4079859..74bb77e03b562698cb887b25cc8a779631a809fb 100644
 --- a/include/openssl/cipher.h
 +++ b/include/openssl/cipher.h
-@@ -461,6 +461,7 @@ OPENSSL_EXPORT const EVP_CIPHER *EVP_des_ede3_ecb(void);
+@@ -552,6 +552,7 @@ OPENSSL_EXPORT const EVP_CIPHER *EVP_des_ede3_ecb(void);
  
  // EVP_aes_128_cfb128 is only available in decrepit.
  OPENSSL_EXPORT const EVP_CIPHER *EVP_aes_128_cfb128(void);

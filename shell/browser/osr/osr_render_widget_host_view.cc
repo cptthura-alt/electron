@@ -210,6 +210,15 @@ OffScreenRenderWidgetHostView::OffScreenRenderWidgetHostView(
   compositor_->SetDelegate(this);
   compositor_->SetRootLayer(root_layer_.get());
 
+  // For offscreen rendering with format rgbaf16, we need to set correct display
+  // color spaces to the compositor, otherwise it won't support hdr.
+  if (offscreen_use_shared_texture_ &&
+      offscreen_shared_texture_pixel_format_ == "rgbaf16") {
+    gfx::DisplayColorSpaces hdr_display_color_spaces(
+        gfx::ColorSpace::CreateSRGBLinear(), viz::SinglePlaneFormat::kRGBA_F16);
+    compositor_->SetDisplayColorSpaces(hdr_display_color_spaces);
+  }
+
   ResizeRootLayer(false);
 
   render_widget_host_->SetView(this);
@@ -489,8 +498,7 @@ uint32_t OffScreenRenderWidgetHostView::GetCaptureSequenceNumber() const {
 void OffScreenRenderWidgetHostView::CopyFromSurface(
     const gfx::Rect& src_rect,
     const gfx::Size& output_size,
-    base::OnceCallback<void(const viz::CopyOutputBitmapWithMetadata&)>
-        callback) {
+    base::OnceCallback<void(const content::CopyFromSurfaceResult&)> callback) {
   delegated_frame_host()->CopyFromCompositingSurface(src_rect, output_size,
                                                      std::move(callback));
 }

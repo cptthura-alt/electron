@@ -432,7 +432,8 @@ class WebContents final : public ExclusiveAccessContext,
 
   // content::RenderWidgetHost::InputEventObserver:
   void OnInputEvent(const content::RenderWidgetHost& rfh,
-                    const blink::WebInputEvent& event) override;
+                    const blink::WebInputEvent& event,
+                    input::InputEventSource source) override;
 
   // content::JavaScriptDialogManager:
   void RunJavaScriptDialog(content::WebContents* web_contents,
@@ -844,6 +845,8 @@ class WebContents final : public ExclusiveAccessContext,
   // Note: owned by inspectable_web_contents_, so declare this *after*
   // that field to ensure the dtor destroys them in the right order.
   raw_ptr<WebContentsZoomController> zoom_controller_ = nullptr;
+
+  std::optional<GURL> pending_unload_url_ = std::nullopt;
 
   // Maps url to file path, used by the file requests sent from devtools.
   typedef std::map<std::string, base::FilePath> PathsMap;
