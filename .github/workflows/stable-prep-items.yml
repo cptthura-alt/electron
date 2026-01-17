@@ -11,6 +11,8 @@ jobs:
   check-stable-prep-items:
     name: Check Stable Prep Items
     runs-on: ubuntu-latest
+    # Only run this workflow in the electron/electron repository where the required secrets exist
+    if: github.repository == 'electron/electron'
     permissions: {}
     steps:
       - name: Generate GitHub App token
